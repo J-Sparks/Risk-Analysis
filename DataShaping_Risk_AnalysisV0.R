@@ -80,11 +80,11 @@ write.csv(app_1721, "applicants_2017to2021V1.csv", row.names = F)
 library(readxl)
 EABA_2810_2021_FTIC_Admitted_Students_Tier_and_Offer_GPA_Data <- read_excel("G:/Shared drives/HMCSE-PAM Lab/DATA 202108/Application_Admit Data 2017-2022/EABA-2810 - 2021 FTIC Admitted Students Tier and Offer GPA - Data.xlsx") #4725
 dim(EABA_2810_2021_FTIC_Admitted_Students_Tier_and_Offer_GPA_Data)
+ 
 library(readr)
 applicants_2017to2021V1 <- read_csv("applicants_2017to2021V1.csv")
 
 applicants_2017to2021_eaba_gpa <- merge(applicants_2017to2021V1, EABA_2810_2021_FTIC_Admitted_Students_Tier_and_Offer_GPA_Data, by="UWFID", all.x = T)
-
 FTIC_ID20172021 <- read_csv("G:/Shared drives/HMCSE-PAM Lab/Jay's Space/2021 Active Projects/08/ACCEPTANCE RATE/all_applicants20172021/FTIC_ID.csv")
 addmargins(table(FTIC_ID20172021$Cohort))
 
