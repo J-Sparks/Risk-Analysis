@@ -17,13 +17,13 @@ knitr::opts_chunk$set(echo = TRUE,message=FALSE, warning=FALSE)
 library(readr)
 applicants_2017to2021_COM_HSGPA2021V0 <- read_csv("G:/Shared drives/HMCSE-PAM Lab/Jay's Space/2021 Active Projects/08/ACCEPTANCE RATE/all_applicants20172021/applicants_2017to2021_COM_HSGPA2021V0.csv") %>% 
     mutate(OFFER_GPA = ifelse(is.na(OFFER_GPA), GPA_HIGHSCHOOL, OFFER_GPA))  %>% 
-    mutate(OFFER_GPA= ifelse(OFFER_GPA < 2.0, NA, OFFER_GPA )) %>% # HSGPA NA
+    mutate(OFFER_GPA= ifelse(OFFER_GPA < 2.0, NA, OFFER_GPA )) %>% # error HAGPA
     mutate(HS_NAME = ifelse(HS_NAME =="Titusville Astronaut HS", "Astronaut High School",HS_NAME)) %>% 
     mutate(HS_CEEB = ifelse(is.na(HS_CEEB), "N/A", HS_CEEB), HS_NAME = ifelse(is.na(HS_NAME), "N/A", HS_NAME)) %>% 
     filter(!is.na(Cohort))
-### fTIC 2021
+### FTIC 2021
 FTIC2021_APR <-  applicants_2017to2021_COM_HSGPA2021V0 %>% 
-    filter(Cohort == 2021)
+    filter(Cohort == 2021) # tier scores are fixed
 
  
 # trim data
@@ -58,6 +58,7 @@ HS_apr[HS_apr$HS_NAME=="N/A",] # not applicable 0.7
 hist(HS_apr$HS_APR_Rate, breaks = 25, col= "pink") 
 # add normal curve
 plot(density(HS_apr$HS_APR_Rate), col="blue")
+ 
 write.csv(HS_apr[,c(1,5,6)], "HS_APR20172020_V0.csv", row.names = F)
 ```
 
@@ -86,7 +87,7 @@ plot(density(PROG_apr$PROG_APR_Rate), col="green")
 write.csv(PROG_apr[,c(1,2,5,6)], "PROGRAM_APR20172020V0.csv", row.names = F) #Nursing/ BSN Program is not in 2021
 ```
 
-### merge APR Rate in the Imported Data
+### Merge APR Rate in the Imported Data
 
 ```{r}
 library(readr)
@@ -107,7 +108,17 @@ trim_apr_data2_[is.na(trim_apr_data2_$PROG_APR_Rate), "PROG_APR_Rate"] <- 0.80 #
 colSums(is.na(trim_apr_data2_))
 addmargins(table(trim_apr_data2_$APR))
 
+### used regression methods for imputatiom
+#trim_apr_data1_imp <- merge( applicants_2017to2021_COM_HSGPA2021V0,HS_APR20172020_V0, by="HS_CEEB",all.x = T)
+
+
+
+
 write.csv(trim_apr_data2_, "trim_apr_data2_V0.csv", row.names = F)
+
+
+
+
 ```
 
 
@@ -121,17 +132,30 @@ library(modelr)     # provides easy pipeline modeling functions
 library(broom)      # helps to tidy up model outpu
 library(readr)
 trim_apr_data2_V0 <- read_csv("trim_apr_data2_V0.csv") 
-colnames(trim_apr_data2_V0)
+colSums(is.na(trim_apr_data2_V0))
 vari_apr1 <- c("PROG_APR_Rate","HS_APR_Rate","GENDER","OFFER_GPA","HS_FOREIGN_LANG","MY_UWF_STATUS")
 ```
 
-```{r}
+```{r description}
 apr_data1 <- trim_apr_data2_V0 %>% 
     mutate(APR= factor(APR)) %>% 
     select(APR, vari_apr1) %>% filter(!is.na(OFFER_GPA)) %>% filter(!is.na(APR)) 
 colSums(is.na(apr_data1))
 vari_apr2 = c ("HSGPA_tenths")
 
+library(gtsummary)
+summary_by_APR <- apr_data1 %>%  mutate(APR = ifelse(APR =="Yes", 1,0))  %>% 
+    tbl_summary( by = APR,
+                statistic = all_continuous() ~ "{mean} ({sd}) {min} {max}",
+                missing = "no"
+                            ) %>% add_n() 
+
+summary_by_APR
+
+```
+
+
+```{r modeling}
 #data partition
 TrainingIndex <- createDataPartition(apr_data1$APR, p=0.7, list = FALSE)
 TrainingSet <- apr_data1[TrainingIndex,] # Training Set
@@ -155,11 +179,13 @@ vari_imp
 p_1 <- predict(admitted_glm, TrainingSet, type="response")
 pred_1 <- ifelse(p_1>0.5, 1,0)
 tab_1 <- table(Predicted=pred_1, Actural=TrainingSet$APR)
+tab_1
 round(sum(diag(tab_1))/sum(tab_1),4)  
 #test data
 p_2 <- predict(admitted_glm, TestingSet, type="response")
 pred_2 <- ifelse(p_2>0.5, 1,0)
 tab_2 <- table(Predicted=pred_2, Actural=TestingSet$APR)
+tab_2
 round(sum(diag(tab_2))/sum(tab_2),4)  
 ### goodness of fit
 with(admitted_glm, pchisq(null.deviance - deviance, df.null-df.residual, lower.tail=F)) 
@@ -190,15 +216,38 @@ PREDICTION_NEWFTIC <- round(predict(RISK_APR_MODEL, new_FTIC_data, type="respons
 hist(PREDICTION_NEWFTIC)
 
 PREDICTION_DF <- cbind(NEWFTIC, PREDICTION_NEWFTIC)
-PREDICTION_DF$codeProb_APR <- ifelse(PREDICTION_DF$PREDICTION_NEWFTIC>=0.90,"low-risk",
-                                     ifelse(PREDICTION_DF$PREDICTION_NEWFTIC>=0.60,"moderate-risk","high-risk"))
+PREDICTION_DF$codeProb_APR <- ifelse(PREDICTION_DF$PREDICTION_NEWFTIC >= 0.90,"low-risk",
+                                    ifelse(PREDICTION_DF$PREDICTION_NEWFTIC >= 0.60,"moderate-risk","high-risk"))
+colSums(is.na(PREDICTION_DF)) 
+unique(PREDICTION_DF$CURRICULUM_COLL)
+library(stringr)
+PREDICTION_DF1 <- PREDICTION_DF %>% arrange(CURRICULUM_COLL) %>% 
+    mutate(College2021 = ifelse( CURRICULUM_COLL == "B", "COB",
+                            ifelse(CURRICULUM_COLL == "P" , "CEPS",
+                                ifelse(CURRICULUM_COLL ==  "H" , "CASSH",
+                                    ifelse(CURRICULUM_COLL ==  "M" , "UKCOH",
+                                        ifelse(CURRICULUM_COLL == "A" , "HMCSE",
+                                            ifelse(CURRICULUM_COLL == "0" , "UNA", NA)))))))  %>% 
+    mutate(Department2021 = CURRICULUM_DEPT, Program2021 = PROGRAM_DESC.y ,
+           TIER2021 = TIER_SCORE.y)
 
+unique(PREDICTION_DF1$College2021)
 
-
-xtabs(~PREDICTION_DF$codeProb_APR)
+xtabs(~PREDICTION_DF1$College2021 + PREDICTION_DF1$codeProb_APR)
 # export resutls
-write.csv(PREDICTION_DF,"OUTPUT_PREDICTION_NEWFTIC2021V0.csv") # removed 11 since missing HSGPA
-colSums(is.na(PREDICTION_DF))
+write.csv(PREDICTION_DF1,"OUTPUT_PREDICTION_NEWFTIC2021V0.csv", row.names = F) # removed 11 since missing HSGPA
+colSums(is.na(PREDICTION_DF1))
 
 ```
+
+
+```{r}
+library(tidyverse)
+g_apr_prop <- PREDICTION_DF %>%
+    ggplot() +
+    geom_bar(aes(x=codeProb_APR, fill=CURRICULUM_COLL))
+plotly::ggplotly(g_apr_prop)
+```
+
+
 
