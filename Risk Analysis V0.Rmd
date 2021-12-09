@@ -1,0 +1,175 @@
+---
+title: "APR Risk Analysis-using Applicants Data"
+author: "Jay Kim"
+date: "12/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message=FALSE, warning=FALSE)
+#source("DataShaping_Risk_AnalysisV0.R")
+```
+
+### Import Data
+
+```{r message=FALSE, warning=FALSE}
+## From ACCEPTANCE Folder
+library(readr)
+applicants_2017to2021_COM_HSGPA2021V0 <- read_csv("G:/Shared drives/HMCSE-PAM Lab/Jay's Space/2021 Active Projects/08/ACCEPTANCE RATE/all_applicants20172021/applicants_2017to2021_COM_HSGPA2021V0.csv") %>% 
+    mutate(OFFER_GPA = ifelse(is.na(OFFER_GPA), GPA_HIGHSCHOOL, OFFER_GPA))  %>% 
+    mutate(OFFER_GPA= ifelse(OFFER_GPA < 2.0, NA, OFFER_GPA )) %>% # HSGPA NA
+    mutate(HS_NAME = ifelse(HS_NAME =="Titusville Astronaut HS", "Astronaut High School",HS_NAME)) %>% 
+    mutate(HS_CEEB = ifelse(is.na(HS_CEEB), "N/A", HS_CEEB), HS_NAME = ifelse(is.na(HS_NAME), "N/A", HS_NAME)) %>% 
+    filter(!is.na(Cohort))
+### fTIC 2021
+FTIC2021_APR <-  applicants_2017to2021_COM_HSGPA2021V0 %>% 
+    filter(Cohort == 2021)
+
+ 
+# trim data
+import_data <- applicants_2017to2021_COM_HSGPA2021V0 %>% 
+    filter(!is.na(APR))  # exclude withdrawn FTIC
+addmargins(table(import_data$APR))  # overall APR=0.8047324  
+risk_apr_data <- import_data    
+#colSums(is.na(risk_apr_data))
+
+```
+
+### High School APR (2017-2020)
+
+```{r HS DataShaping}
+HS_apr <- risk_apr_data %>% select(HS_CEEB, HS_NAME,HS_CNTY, APR, Cohort) %>% 
+    filter(!is.na(.)) %>% 
+    group_by(HS_CEEB,HS_NAME, APR) %>% 
+     summarise(Count=n(), .groups = "drop") %>% 
+    tidyr::pivot_wider(names_from = APR, values_from = Count) %>% 
+    replace(is.na(.), 0) %>% 
+    mutate(HS_Total = (Yes+No), HS_APR_Rate= round(Yes/HS_Total,4)) %>% 
+    mutate(HS_APR_Rate = ifelse(HS_APR_Rate < 0.25, 0.20, HS_APR_Rate)) %>% # replace 0% apr to 20%
+    arrange(HS_APR_Rate)
+
+HS_apr[which(duplicated(HS_apr$HS_CEEB)),]
+HS_apr[HS_apr$HS_CEEB=="101758",]
+HS_apr[which(duplicated(HS_apr$HS_NAME)),] # fixed #line 19
+risk_apr_data[risk_apr_data$HS_NAME=="Southside High School",] # came from different CNTY
+HS_apr[HS_apr$HS_NAME=="N/A",] # not applicable 0.7
+
+# density plot
+hist(HS_apr$HS_APR_Rate, breaks = 25, col= "pink") 
+# add normal curve
+plot(density(HS_apr$HS_APR_Rate), col="blue")
+write.csv(HS_apr[,c(1,5,6)], "HS_APR20172020_V0.csv", row.names = F)
+```
+
+### Program APR  
+
+
+```{r}
+
+PROG_apr <- risk_apr_data %>% select(PROGRAM_CODE, PROGRAM_DESC, APR, Cohort) %>% 
+    filter(!is.na(.)) %>% 
+    group_by(PROGRAM_DESC,PROGRAM_CODE, APR) %>% 
+     summarise(Count=n(), .groups = "drop") %>% 
+    tidyr::pivot_wider(names_from = APR, values_from = Count) %>% 
+    replace(is.na(.), 0) %>% 
+    mutate(PROG_Total = (Yes+No), PROG_APR_Rate= round(Yes/PROG_Total,4)) %>% 
+    mutate(PROG_APR_Rate = ifelse(PROG_APR_Rate < 0.25, 0.20, PROG_APR_Rate)) %>% 
+    arrange(PROGRAM_DESC)
+
+PROG_apr
+
+#density plot
+hist(PROG_apr$PROG_APR_Rate, breaks = 25, col= "yellow") 
+plot(density(PROG_apr$PROG_APR_Rate), col="green")
+  
+
+write.csv(PROG_apr[,c(1,2,5,6)], "PROGRAM_APR20172020V0.csv", row.names = F) #Nursing/ BSN Program is not in 2021
+```
+
+### merge APR Rate in the Imported Data
+
+```{r}
+library(readr)
+HS_APR20172020_V0 <- read_csv("G:/Shared drives/HMCSE-PAM Lab/Jay's Space/_HIGH_PRIORITY_PROJECTS/APR/APR FTIC2021/HS_APR20172020_V0.csv")
+PROGRAM_APR20172020V0 <- read_csv("G:/Shared drives/HMCSE-PAM Lab/Jay's Space/_HIGH_PRIORITY_PROJECTS/APR/APR FTIC2021/PROGRAM_APR20172020V0.csv")
+
+# hs apr
+trim_apr_data1 <- merge( applicants_2017to2021_COM_HSGPA2021V0,HS_APR20172020_V0, by="HS_CEEB",all.x = T)
+colSums(is.na(trim_apr_data1))
+NA_HSNAME2021 <- trim_apr_data1[is.na(trim_apr_data1$HS_APR_Rate),] #211
+trim_apr_data1[is.na(trim_apr_data1$HS_APR_Rate), "HS_APR_Rate"] <- 0.80 # replace overall apr rate 
+colSums(is.na(trim_apr_data1))
+# program apr
+trim_apr_data2 <- merge( trim_apr_data1,PROGRAM_APR20172020V0, by="PROGRAM_CODE",all.x = T)
+trim_apr_data2_ <- trim_apr_data2[!duplicated(trim_apr_data2$UWFID),] #5295
+NA_PROG2021 <- trim_apr_data2_[is.na(trim_apr_data2_$PROG_APR_Rate),] #18
+trim_apr_data2_[is.na(trim_apr_data2_$PROG_APR_Rate), "PROG_APR_Rate"] <- 0.80 # replace overall apr rate 
+colSums(is.na(trim_apr_data2_))
+addmargins(table(trim_apr_data2_$APR))
+
+write.csv(trim_apr_data2_, "trim_apr_data2_V0.csv", row.names = F)
+```
+
+
+# Risk Analysis
+
+```{r}
+
+library(caret)
+library(tidyverse)  # data manipulation and visualization
+library(modelr)     # provides easy pipeline modeling functions
+library(broom)      # helps to tidy up model outpu
+library(readr)
+trim_apr_data2_V0 <- read_csv("trim_apr_data2_V0.csv") 
+colnames(trim_apr_data2_V0)
+vari_apr1 <- c("PROG_APR_Rate","HS_APR_Rate","GENDER","OFFER_GPA","HS_FOREIGN_LANG","MY_UWF_STATUS")
+```
+
+```{r}
+apr_data1 <- trim_apr_data2_V0 %>% 
+    mutate(APR= factor(APR)) %>% 
+    select(APR, vari_apr1) %>% filter(!is.na(OFFER_GPA)) %>% filter(!is.na(APR)) 
+colSums(is.na(apr_data1))
+vari_apr2 = c ("HSGPA_tenths")
+
+#data partition
+TrainingIndex <- createDataPartition(apr_data1$APR, p=0.7, list = FALSE)
+TrainingSet <- apr_data1[TrainingIndex,] # Training Set
+TestingSet <- apr_data1[-TrainingIndex,] # Test Set
+
+# Build model using all factors and labels
+set.seed(111)
+admitted_glm <- glm(APR ~ ., data = TrainingSet, family="binomial")
+summary(admitted_glm)
+exp(coef(admitted_glm))
+P_value <- broom::tidy(admitted_glm)
+
+#coefficient
+coef1 <- exp(coef(admitted_glm))
+coef_table <- knitr::kable(coef1)
+coef_table
+vari_imp <- knitr::kable(caret::varImp(admitted_glm))
+vari_imp
+
+#accuracy train data 
+p_1 <- predict(admitted_glm, TrainingSet, type="response")
+pred_1 <- ifelse(p_1>0.5, 1,0)
+tab_1 <- table(Predicted=pred_1, Actural=TrainingSet$APR)
+round(sum(diag(tab_1))/sum(tab_1),4) #80.15%
+#test data
+p_2 <- predict(admitted_glm, TestingSet, type="response")
+pred_2 <- ifelse(p_2>0.5, 1,0)
+tab_2 <- table(Predicted=pred_2, Actural=TestingSet$APR)
+round(sum(diag(tab_2))/sum(tab_2),4) #78.6
+### goodness of fit
+with(admitted_glm, pchisq(null.deviance - deviance, df.null-df.residual, lower.tail=F))#p-value==1.86439e-162
+#anova(admitted_glm, admitted_glm_re, test = "Chisq")
+
+
+
+
+
+
+```
+
+
