@@ -183,7 +183,12 @@ tab_1
 round(sum(diag(tab_1))/sum(tab_1),4)  
 #test data
 p_2 <- predict(admitted_glm, TestingSet, type="response")
-pred_2 <- ifelse(p_2>0.5, 1,0)
+#ROC Curve ( not always right to choose)
+model_AUC <- colAUC(p_2, TestingSet$APR, plotROC = T)
+abline(h = model_AUC, col="blue")
+text(0.2, 0.9, cex= 0.8, labels = paste("Optimal Value for cutoff:", round(model_AUC,4)))
+
+pred_2 <- ifelse(p_2 > 0.5, 1,0) # in this analysis 0.5 works better
 tab_2 <- table(Predicted=pred_2, Actural=TestingSet$APR)
 tab_2
 round(sum(diag(tab_2))/sum(tab_2),4)  
@@ -199,6 +204,59 @@ saveRDS(admitted_glm, "./RISK_APR_MODEL_glmV0.rds")
 
 
 ```
+
+### Using ueuralnet
+### Modeling #2
+
+```{r modeling 2}
+library(MASS)
+colSums(is.na(URM.dummy))
+apr.dummy <- URM.dummy %>%  select( PROG_APR_Rate, HS_APR_Rate, OFFER_GPA, AGE,3,5,6,7,8,9,11,12,13,1 )
+num.vari <- apr.dummy[1:4]
+Binary.vari <- apr.dummy[11] 
+##normalized data
+
+maxs <- apply(num.vari, 2, max);maxs
+mins <- apply(num.vari, 2, min);mins
+#scaled
+scaled.data0 <- scale(num.vari, center =  mins, scale = maxs - mins) %>%  as.data.frame()
+scaled.data <- cbind(scaled.data0, Binary.vari)
+str(scaled.data)
+#partition
+library(caTools)
+split <- sample.split(scaled.data$APR, SplitRatio =0.7 )
+train <- subset(scaled.data, split == TRUE)   # Training Set
+test <- subset(scaled.data, split == FALSE)  # Test Set
+glimpse(train)
+# factors_f
+n_factor <- names(train)
+f <- as.formula(paste("APR ~", paste(n_factor[!n_factor %in% "APR"], collapse = " + ")))
+# package
+#install.packages("neuralnet")
+library(neuralnet)
+apr_nn <- neuralnet(f, data = train, hidden =c(3,2),  linear.output = FALSE)
+plot(apr_nn) 
+#predicted train
+predicted.nn.apr <- compute(apr_nn, train[2:14])
+head(predicted.nn.apr$net.result,10)
+
+predictions <- sapply(predicted.nn.apr$net.result, round)
+head(predictions)
+#confusion matrix
+table(predictions, train$APR)
+
+
+#predicted test
+predicted.nn.apr <- neuralnet::compute(apr_nn, test[2:14])
+head(predicted.nn.apr$net.result,10)
+
+predictions <- sapply(predicted.nn.apr$net.result, round)
+head(predictions)
+#confusion matrix
+table(predictions, test$APR)
+
+```
+
 
 ### Export Results
 
