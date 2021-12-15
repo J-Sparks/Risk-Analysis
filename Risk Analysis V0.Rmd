@@ -210,51 +210,65 @@ saveRDS(admitted_glm, "./RISK_APR_MODEL_glmV0.rds")
 
 ```{r modeling 2}
 library(MASS)
-colSums(is.na(URM.dummy))
-apr.dummy <- URM.dummy %>%  select( PROG_APR_Rate, HS_APR_Rate, OFFER_GPA, AGE,3,5,6,7,8,9,11,12,13,1 )
-num.vari <- apr.dummy[1:4]
-Binary.vari <- apr.dummy[11] 
-##normalized data
 
-maxs <- apply(num.vari, 2, max);maxs
-mins <- apply(num.vari, 2, min);mins
+apr.dummy <- URM.dummy   
+# num.vari <- apr.dummy[1:4]
+# apr.vari <- apr.dummy[c(5:7,12)] #12 apr
+all.num.vari <- apr.dummy[2:12]
+##normalized data
+maxs <- apply(all.num.vari, 2, max);maxs
+mins <- apply(all.num.vari, 2, min);mins
+
 #scaled
-scaled.data0 <- scale(num.vari, center =  mins, scale = maxs - mins) %>%  as.data.frame()
-scaled.data <- cbind(scaled.data0, Binary.vari)
+scaled.data.all <- scale(all.num.vari, center =  mins, scale = maxs - mins) %>%  as.data.frame()
+hist(scaled.data.all$OFFER_GPA) # range from 0 to 1
+ 
+scaled.data <- cbind(scaled.data.all, APR=apr.dummy$APR)
 str(scaled.data)
+colnames(scaled.data) <- c("Program_RATE", "HighSchool_RATE","Gender","HSGPA","HSForeignLang","UWFStatus","PellELGBL","CollegeExperienced","TraditionFTIC","Age","NewHSEntered","APR")
 #partition
 library(caTools)
-split <- sample.split(scaled.data$APR, SplitRatio =0.7 )
-train <- subset(scaled.data, split == TRUE)   # Training Set
-test <- subset(scaled.data, split == FALSE)  # Test Set
-glimpse(train)
+set.seed(333)
+split <- sample.split(scaled.data$APR, SplitRatio = 0.7 )
+train_nn <- subset(scaled.data, split == TRUE)   # Training Set
+test_nn <- subset(scaled.data, split == FALSE)  # Test Set
+glimpse(train_nn)
 # factors_f
-n_factor <- names(train)
+n_factor <- names(train_nn)
 f <- as.formula(paste("APR ~", paste(n_factor[!n_factor %in% "APR"], collapse = " + ")))
 # package
 #install.packages("neuralnet")
 library(neuralnet)
-apr_nn <- neuralnet(f, data = train, hidden =c(3,2),  linear.output = FALSE)
-plot(apr_nn) 
-#predicted train
-predicted.nn.apr <- compute(apr_nn, train[2:14])
-head(predicted.nn.apr$net.result,10)
+set.seed(333)
+apr_nn <- neuralnet(f, data = train_nn, hidden = c(2,2),   linear.output = FALSE , likelihood = TRUE, threshold = 0.05 ) 
+print(apr_nn$weights)
+plot(apr_nn, 
+     col.hidden = "darkblue",
+     col.hidden.synapse = "darkgreen",
+     show.weights = T,
+     information = T,
+     fill = "yellow") 
 
-predictions <- sapply(predicted.nn.apr$net.result, round)
-head(predictions)
+# prediction
+# apr_nn$result.matrix
+# apr_nn$net.result
+#predicted train
+predicted.train <- neuralnet::compute(apr_nn, train_nn[1:11])
+head( predicted.train$net.result,10)
+pred_1 <- ifelse(predicted.train$net.result > 0.5, 1,0)
+head(pred_1,10)
 #confusion matrix
-table(predictions, train$APR)
+table(pred_1[,2], train_nn$APR) #2455/2866 0.8566
 
 
 #predicted test
-predicted.nn.apr <- neuralnet::compute(apr_nn, test[2:14])
-head(predicted.nn.apr$net.result,10)
+predicted.test <- neuralnet::compute(apr_nn, test_nn[1:11])
+head(predicted.test$net.result,10)
 
-predictions <- sapply(predicted.nn.apr$net.result, round)
-head(predictions)
+predictions.test <- ifelse(predicted.test$net.result > 0.5, 1,0)
+head(predictions.test,10)
 #confusion matrix
-table(predictions, test$APR)
-
+table(predictions.test[,2], test_nn$APR) #1040/1229 0.8469
 ```
 
 
