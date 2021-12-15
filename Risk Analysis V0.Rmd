@@ -153,7 +153,18 @@ summary_by_APR <- apr_data1 %>%  mutate(APR = ifelse(APR =="Yes", 1,0))  %>%
 summary_by_APR
 
 ```
+### Correlation
 
+```{r}
+library(corrgram)
+library(corrplot)
+num.vari.cor <- trim_apr_data2_V0[c(2,3,5)] %>% na.omit()
+cor.vari <- cor(num.vari.cor)
+cor.vari
+
+corrplot(cor.vari, method = "pie" )
+#corrgram(cor.vari)
+```
 
 ```{r modeling}
 #data partition
