@@ -377,4 +377,33 @@ OUTPUT_PREDICTION_NEWFTIC2021V2 <- merge(OUTPUT_PREDICTION_NEWFTIC2021V1,transf_
 write.csv(OUTPUT_PREDICTION_NEWFTIC2021V2,"OUTPUT_PREDICTION_NEWFTIC2021V2.csv", row.names = F) # add transfer hours for inexperienced FTIC
 ```
 
+### add better gpa from course taken
+
+```{r}
+library(readr)
+OUTPUT_PREDICTION_NEWFTIC2021V2 <- read_csv("OUTPUT_PREDICTION_NEWFTIC2021V2.csv")
+UWFGPA_FTIC_V0 <- read_csv("G:/Shared drives/HMCSE-PAM Lab/Jay's Space/_HIGH_PRIORITY_PROJECTS/APR/01 FILES/UWFGPA_FTIC_V0.csv") # 1st year gpa
+# from APR folder
+UWFGPA_FTIC_V0[UWFGPA_FTIC_V0$F1_UWFID=="970607265",]
+OUTPUT_PREDICTION_NEWFTIC2021V3 <- merge(OUTPUT_PREDICTION_NEWFTIC2021V2, UWFGPA_FTIC_V0,  by.x="UWFID", by.y =  "F1_UWFID", all.x = T) %>%  # filtered for 2021 fall only
+    select(1:86, contains("CRS")) %>% 
+     mutate(codeProb_APR4 = cut(PREDICTION_NEWFTIC, breaks = c(0, 0.6900, 0.8600, 0.8900, 1), 
+                               labels =c("high-risk","moderate-risk2","moderate-risk1", "low-risk") )) %>% 
+    relocate(codeProb_APR4, .after =codeProb_APR3 ) %>% 
+    mutate(FALL1STATUS = ifelse(is.na(CRS_crs_DEMO_TIME),"Withdrawn",
+                                ifelse(F1_GPA2.00 == "Stopout", "Stopout",
+                                ifelse(F1_DEMO_TIME_FRAME == 202201, "Continuing","Others")))) %>% 
+    mutate(GPA_STATUS = ifelse(is.na(CRS_CUM_GPA), "Withdrawn",
+                             ifelse(CRS_CUM_GPA < 2.00, "Below2.00",
+                                    ifelse(CRS_CUM_GPA < 2.77 ,"UWFGPAFALL1[2.00,2.77)", "Above2.77")))) %>% 
+     mutate(AVEGPA_STATUS =  ifelse(is.na(CRS_CUM_GPA), "Withdrawn",
+        ifelse(CRS_CUM_GPA < 2.77, "Below2.77", "Above2.77"))) %>% 
+     mutate(GPA2.00_STATUS =  ifelse(is.na(CRS_CUM_GPA), "Withdrawn",
+        ifelse(CRS_CUM_GPA < 2.00, "Below2.00", "Above2.00")))
+    
+addmargins(table(OUTPUT_PREDICTION_NEWFTIC2021V3$AVEGPA_STATUS, OUTPUT_PREDICTION_NEWFTIC2021V3$GPA2.00_STATUS))  # 11 no prediction
+NA_withdrawn <- OUTPUT_PREDICTION_NEWFTIC2021V3[is.na(OUTPUT_PREDICTION_NEWFTIC2021V3$FALL1STATUS),]
+write.csv(OUTPUT_PREDICTION_NEWFTIC2021V3,"OUTPUT_PREDICTION_NEWFTIC2021V3.csv",row.names = F)
+```
+
 
