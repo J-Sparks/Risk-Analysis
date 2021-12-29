@@ -1,0 +1,33 @@
+---
+title: "At-risk FTIC 2021 lists"
+author: "Jay Kim"
+date: "12/28/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readxl)
+Fall1GPA_TRENDS_V0_JS <- read_excel("Fall1GPA_TRENDS_V0_JS.xlsx", 
+    sheet = "Fall1GPA_TRENDS_V0")
+at_risk2021 <- Fall1GPA_TRENDS_V0_JS %>% 
+    filter(F1_Cohort == 2021  ) %>% 
+    filter(CRS_CUM_GPA < 2.00 |  CRS_CUM_GPA =="NA"  )
+addmargins(table(at_risk2021$F1_Cohort))
+
+library(readxl)
+OUTPUT_PREDICTION_NEWFTIC2021V3_JS <- read_excel("G:/Shared drives/HMCSE-PAM Lab/Jay's Space/_HIGH_PRIORITY_PROJECTS/APR/APR FTIC2021/OUTPUT_PREDICTION_NEWFTIC2021V3_JS.xlsx", 
+    sheet = "OUTPUT_PREDICTION_NEWFTIC2021V3") 
+
+at_risk_2021 <- OUTPUT_PREDICTION_NEWFTIC2021V3_JS %>% 
+    filter(CRS_CUM_GPA < 2.00 | CRS_CUM_GPA =="NA" | codeProb_APR3 == "high-risk") %>% 
+    filter(!duplicated(UWFID))
+
+anyDuplicated(at_risk_2021$UWFID) 
+addmargins(table(at_risk_2021$GPA_STATUS, at_risk_2021$codeProb_APR3))
+write.csv(at_risk_2021, "at_risk_FTIC_2021_UWFID.csv", row.names = F)
+```
+
